@@ -4,11 +4,16 @@ Test script to verify the 3-day lookback period is working correctly.
 """
 
 import logging
+import os
+import sys
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
+
+# Add parent directory to path to import modules
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import our modules
 from config import EMAIL_LOOKBACK_DAYS, get_config_summary

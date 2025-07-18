@@ -93,13 +93,11 @@ class TestNotionClient(unittest.TestCase):
         
         # Check that properties were formatted correctly
         properties = call_args[1]['properties']
-        self.assertEqual(properties['Recruiter Name']['title'][0]['text']['content'], "John Doe")
-        self.assertEqual(properties['Company']['rich_text'][0]['text']['content'], "Tech Corp")
-        self.assertEqual(properties['Position']['rich_text'][0]['text']['content'], "Software Engineer")
-        self.assertEqual(properties['Location']['rich_text'][0]['text']['content'], "San Francisco, CA")
-        self.assertEqual(properties['Status']['select']['name'], "Recruiter Screen")
-        self.assertEqual(properties['Email']['email'], "john.doe@company.com")
-        self.assertEqual(properties['Date Received']['date']['start'], "2023-12-01")
+        self.assertEqual(properties['Company']['title'][0]['text']['content'], "Tech Corp")
+        self.assertEqual(properties['Recruiter Name']['rich_text'][0]['text']['content'], "John Doe")
+        self.assertEqual(properties['Job Title']['rich_text'][0]['text']['content'], "Software Engineer")
+        self.assertEqual(properties['Stage']['status']['name'], "Recruiter Screen")
+        self.assertEqual(properties['Application Date']['date']['start'], "2023-12-01")
     
     @patch('notion_api.Client')
     def test_create_recruiter_entry_failure(self, mock_client_class):
@@ -113,9 +111,13 @@ class TestNotionClient(unittest.TestCase):
         
         self.assertIsNone(result)
     
+    @patch('notion_api.datetime')
     @patch('notion_api.Client')
-    def test_update_recruiter_entry_success(self, mock_client_class):
+    def test_update_recruiter_entry_success(self, mock_client_class, mock_datetime):
         """Test successful recruiter entry update."""
+        # Mock datetime to return a fixed date
+        mock_datetime.now.return_value = datetime(2023, 12, 1, 10, 0, 0)
+        
         mock_client = Mock()
         mock_client_class.return_value = mock_client
         
@@ -130,8 +132,8 @@ class TestNotionClient(unittest.TestCase):
         call_args = mock_client.pages.update.call_args
         self.assertEqual(call_args[1]['page_id'], "page_id")
         properties = call_args[1]['properties']
-        self.assertEqual(properties['Status']['select']['name'], "Phone Screen")
-        self.assertEqual(properties['Notes']['rich_text'][0]['text']['content'], "Great conversation")
+        self.assertEqual(properties['Stage']['status']['name'], "Phone Screen")
+        self.assertEqual(properties['Last Contact Date']['date']['start'], "2023-12-01")
     
     @patch('notion_api.Client')
     def test_search_entries_success(self, mock_client_class):

@@ -22,7 +22,6 @@ def create_tables(db_path: str = "database.db"):
         id INTEGER PRIMARY KEY,
         name TEXT,
         email TEXT UNIQUE,
-        gmail_app_password TEXT,
         gmail_label TEXT DEFAULT 'Recruiters',
         notion_token TEXT,
         notion_database_id TEXT,
@@ -91,7 +90,6 @@ def seed_test_data(db_path: str = "database.db"):
         {
             'name': 'Test User 1',
             'email': 'test1@gmail.com',
-            'gmail_app_password': 'abcd efgh ijkl mnop',
             'gmail_label': 'Recruiters',
             'notion_token': 'secret_token_placeholder_1',
             'notion_database_id': 'database_id_placeholder_1'
@@ -99,7 +97,6 @@ def seed_test_data(db_path: str = "database.db"):
         {
             'name': 'Test User 2', 
             'email': 'test2@gmail.com',
-            'gmail_app_password': 'efgh ijkl mnop qrst',
             'gmail_label': 'Recruiters',
             'notion_token': 'secret_token_placeholder_2',
             'notion_database_id': 'database_id_placeholder_2'

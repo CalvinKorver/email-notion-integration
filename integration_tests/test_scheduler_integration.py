@@ -4,8 +4,14 @@ Test script for the scheduler integration with Flask app.
 """
 
 import logging
+import os
+import sys
 import time
 from datetime import datetime
+
+# Add parent directory to path to import modules
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from scheduler import EmailScheduler, get_scheduler
 from config import get_config_summary
 
