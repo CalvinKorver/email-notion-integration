@@ -51,75 +51,77 @@ class NotionClient:
         Args:
             database_id: The ID of the Notion database
             recruiter_data: Dictionary containing recruiter information
-                - recruiter_name: str
-                - recruiter_email: str
-                - company: str
-                - position: str
-                - location: str
-                - status: str (defaults to "Recruiter Screen")
-                - date_received: datetime
+                - recruiter_name: str (optional, defaults to placeholder)
+                - recruiter_email: str (stored in Notes field)
+                - company: str (optional, defaults to placeholder)
+                - position: str (optional, defaults to placeholder)
+                - location: str (stored in Notes field)
+                - status: str (defaults to "Applied")
+                - date_received: datetime (only set on creation)
         
         Returns:
             The page ID of the created entry, or None if failed
         """
         try:
-            # Format data for Notion API
+            current_time = datetime.now()
+            
+            # Format data for your actual Notion database schema
             properties = {
-                "Recruiter Name": {
+                "Company": {
                     "title": [
                         {
                             "text": {
-                                "content": recruiter_data.get("recruiter_name", "Unknown")
+                                "content": recruiter_data.get("company", "PLACEHOLDER_COMPANY")
                             }
                         }
                     ]
                 },
-                "Company": {
+                "Recruiter Name": {
                     "rich_text": [
                         {
                             "text": {
-                                "content": recruiter_data.get("company", "Unknown")
+                                "content": recruiter_data.get("recruiter_name", "PLACEHOLDER_RECRUITER")
                             }
                         }
                     ]
                 },
-                "Position": {
+                "Job Title": {
                     "rich_text": [
                         {
                             "text": {
-                                "content": recruiter_data.get("position", "Unknown")
+                                "content": recruiter_data.get("position", "PLACEHOLDER_POSITION")
                             }
                         }
                     ]
                 },
-                "Location": {
-                    "rich_text": [
-                        {
-                            "text": {
-                                "content": recruiter_data.get("location", "Unknown")
-                            }
-                        }
-                    ]
-                },
-                "Status": {
-                    "select": {
-                        "name": recruiter_data.get("status", "Recruiter Screen")
+                "Stage": {
+                    "status": {
+                        "name": recruiter_data.get("status", "Applied")
                     }
                 },
-                "Email": {
-                    "email": recruiter_data.get("recruiter_email", "")
+                "Last Contact Date": {
+                    "date": {
+                        "start": current_time.strftime("%Y-%m-%d")
+                    }
                 }
             }
             
-            # Add date received if provided
+            # Add application date (only set on creation)
             if "date_received" in recruiter_data and recruiter_data["date_received"]:
                 date_received = recruiter_data["date_received"]
                 if isinstance(date_received, datetime):
-                    properties["Date Received"] = {
+                    properties["Application Date"] = {
                         "date": {
                             "start": date_received.strftime("%Y-%m-%d")
                         }
                     }
+            else:
+                # Default to current date if no date provided
+                properties["Application Date"] = {
+                    "date": {
+                        "start": current_time.strftime("%Y-%m-%d")
+                    }
+                }
             
             # Create the page
             page = self.client.pages.create(
@@ -128,7 +130,7 @@ class NotionClient:
             )
             
             page_id = page["id"]
-            logger.info(f"Created Notion entry for {recruiter_data.get('recruiter_name', 'Unknown')} at {recruiter_data.get('company', 'Unknown')}")
+            logger.info(f"Created Notion entry for {recruiter_data.get('recruiter_name', 'PLACEHOLDER_RECRUITER')} at {recruiter_data.get('company', 'PLACEHOLDER_COMPANY')}")
             return page_id
             
         except APIResponseError as e:
@@ -145,27 +147,66 @@ class NotionClient:
         Args:
             page_id: The ID of the Notion page to update
             updates: Dictionary of fields to update
+                - status: str (updates Stage field)
+                - recruiter_name: str (updates Recruiter Name field)
+                - company: str (updates Company field)
+                - position: str (updates Job Title field)
+                
+        Note: 
+            - Last Contact Date is always updated to current date
+            - Follow-up Needed and Notes are never modified via API
+            - Application Date is never modified after creation
         
         Returns:
             True if successful, False otherwise
         """
         try:
+            current_time = datetime.now()
             properties = {}
+            
+            # Always update Last Contact Date
+            properties["Last Contact Date"] = {
+                "date": {
+                    "start": current_time.strftime("%Y-%m-%d")
+                }
+            }
             
             # Map updates to Notion property format
             if "status" in updates:
-                properties["Status"] = {
-                    "select": {
+                properties["Stage"] = {
+                    "status": {
                         "name": updates["status"]
                     }
                 }
             
-            if "notes" in updates:
-                properties["Notes"] = {
+            if "recruiter_name" in updates:
+                properties["Recruiter Name"] = {
                     "rich_text": [
                         {
                             "text": {
-                                "content": updates["notes"]
+                                "content": updates["recruiter_name"]
+                            }
+                        }
+                    ]
+                }
+            
+            if "company" in updates:
+                properties["Company"] = {
+                    "title": [
+                        {
+                            "text": {
+                                "content": updates["company"]
+                            }
+                        }
+                    ]
+                }
+            
+            if "position" in updates:
+                properties["Job Title"] = {
+                    "rich_text": [
+                        {
+                            "text": {
+                                "content": updates["position"]
                             }
                         }
                     ]
