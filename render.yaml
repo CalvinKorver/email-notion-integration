@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: email-notion-integration
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120"
+    envVars:
+      - key: DATABASE_PATH
+        value: "/opt/render/project/src/database.db"
+      - key: FLASK_ENV
+        value: "production"
+      - key: FLASK_HOST
+        value: "0.0.0.0"
+    disk:
+      name: database
+      mountPath: /opt/render/project/src
+      sizeGB: 1
