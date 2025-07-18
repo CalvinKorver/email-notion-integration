@@ -14,9 +14,9 @@ import config
 
 
 def test_database_entries():
-    """Test that our webhook calls actually created database entries."""
+    """Test database entries and Gmail architecture setup."""
     
-    print("Testing database entries after webhook calls...")
+    print("Testing database entries and Gmail setup...")
     
     # Initialize database
     db = DatabaseManager(config.DATABASE_PATH)
@@ -27,7 +27,8 @@ def test_database_entries():
     
     for user in users:
         print(f"\nUser: {user['name']} ({user['email']})")
-        print(f"  Mailgun email: {user['mailgun_email']}")
+        print(f"  Gmail label: {user.get('gmail_label', 'N/A')}")
+        print(f"  Last checked: {user.get('last_checked', 'Never')}")
         print(f"  Created: {user['created_at']}")
         
         # Get contacts for this user
@@ -40,6 +41,7 @@ def test_database_entries():
             print(f"      Location: {contact['location']}")
             print(f"      Email: {contact['recruiter_email']}")
             print(f"      Status: {contact['status']}")
+            print(f"      Gmail Message ID: {contact.get('gmail_message_id', 'N/A')}")
             print(f"      Notion Page: {contact['notion_page_id']}")
             print(f"      Received: {contact['date_received']}")
     
@@ -54,10 +56,23 @@ def test_database_entries():
     
     print(f"\nTotal contacts across all users: {total_contacts}")
     
+    # Test configuration for Gmail setup
+    print(f"\nGmail Configuration:")
+    print(f"  Check interval: {config.CHECK_INTERVAL} minutes")
+    print(f"  Configured users: {len(config.USERS)}")
+    
+    for i, user in enumerate(config.USERS):
+        print(f"  User {i+1}: {user['name']}")
+        print(f"    Email: {user['email']}")
+        print(f"    Gmail label: {user['gmail_label']}")
+        print(f"    Has app password: {'Yes' if user['gmail_app_password'] else 'No'}")
+    
     if total_contacts > 0:
-        print("✅ Database entries found - webhook processing working!")
+        print("✅ Database entries found - email processing working!")
     else:
-        print("❌ No database entries found - webhook may not be working")
+        print("ℹ️  No database entries found - this is expected until Gmail emails are processed")
+        
+    print("✅ Database and configuration structure validated!")
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Recruiter Email Tracker - Main Flask Application
-Processes forwarded recruiter emails via Mailgun webhooks and creates Notion entries.
+Periodically checks Gmail inboxes for recruiter emails and creates Notion entries.
 """
 
 from flask import Flask, request, jsonify
@@ -13,7 +13,7 @@ import json
 # Import our modules
 import config
 from database import DatabaseManager
-
+from email_checker import GmailChecker
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -33,21 +33,24 @@ logger = logging.getLogger(__name__)
 db = DatabaseManager(config.DATABASE_PATH)
 
 
-def parse_email_simple(form_data, sender, subject):
+def parse_recruiter_email_simple(email_data):
     """
-    Simple email parser that creates dummy data for testing.
-    This replaces complex parsing logic for now.
+    Simple email parser that extracts recruiter data from Gmail message.
+    This is a basic implementation that can be enhanced later.
     """
     # Extract recruiter email and basic info from sender
-    recruiter_email = sender
+    sender = email_data.get('sender', '')
+    subject = email_data.get('subject', '')
     
-    # Try to extract name from email (before @)
-    if '@' in recruiter_email:
-        name_part = recruiter_email.split('@')[0]
-        # Convert dots/underscores to spaces and title case
-        recruiter_name = name_part.replace('.', ' ').replace('_', ' ').title()
+    # Try to extract recruiter email from sender
+    if '<' in sender and '>' in sender:
+        # Format: "Name <email@domain.com>"
+        recruiter_email = sender.split('<')[1].split('>')[0]
+        recruiter_name = sender.split('<')[0].strip().strip('"')
     else:
-        recruiter_name = "Unknown Recruiter"
+        # Format: "email@domain.com" or just plain text
+        recruiter_email = sender
+        recruiter_name = sender.split('@')[0] if '@' in sender else "Unknown Recruiter"
     
     # Extract company from email domain (simple heuristic)
     if '@' in recruiter_email:
@@ -110,6 +113,107 @@ def create_notion_entry_placeholder(user, parsed_data):
     return fake_page_id
 
 
+def check_user_emails(user):
+    """Check emails for a single user and process any new recruiter emails."""
+    logger.info(f"Checking emails for user: {user['name']} ({user['email']})")
+    
+    try:
+        # Get or create user in database
+        db_user = db.get_user_by_email(user['email'])
+        if not db_user:
+            logger.info(f"Creating new user in database: {user['name']}")
+            user_id = db.create_user(
+                name=user['name'],
+                email=user['email'],
+                gmail_app_password=user['gmail_app_password'],
+                gmail_label=user['gmail_label'],
+                notion_token=user['notion_token'],
+                notion_database_id=user['notion_database_id']
+            )
+            db_user = {'id': user_id, 'last_checked': None}
+        
+        # Initialize Gmail checker
+        gmail_checker = GmailChecker(user['email'], user['gmail_app_password'])
+        
+        # Determine since_date based on last_checked
+        since_date = db_user.get('last_checked')
+        if since_date:
+            logger.info(f"Checking emails since last check: {since_date}")
+        else:
+            logger.info("First time checking emails for this user")
+        
+        # Check for new emails
+        emails = gmail_checker.check_new_emails(
+            label=user['gmail_label'],
+            since_date=since_date
+        )
+        
+        processed_count = 0
+        for email_data in emails:
+            # Check if we've already processed this email
+            if db.get_contact_by_gmail_message_id(email_data['message_id']):
+                logger.debug(f"Skipping already processed email: {email_data['message_id']}")
+                continue
+            
+            # Parse email data
+            parsed_data = parse_recruiter_email_simple(email_data)
+            
+            # Store in database
+            contact_id = db.create_recruiter_contact(
+                user_id=db_user['id'],
+                gmail_message_id=email_data['message_id'],
+                recruiter_name=parsed_data['recruiter_name'],
+                recruiter_email=parsed_data['recruiter_email'],
+                company=parsed_data['company'],
+                position=parsed_data['position'],
+                location=parsed_data['location'],
+                date_received=email_data['date_received'],
+                raw_email_data=email_data['raw_email'],
+                status="Recruiter Screen"
+            )
+            
+            logger.info(f"Created database entry with ID: {contact_id}")
+            
+            # Create Notion entry (placeholder)
+            notion_page_id = create_notion_entry_placeholder(user, parsed_data)
+            
+            # Update database with Notion page ID
+            if notion_page_id:
+                db.update_notion_page_id(contact_id, notion_page_id)
+                logger.info(f"Updated contact {contact_id} with Notion page ID: {notion_page_id}")
+            
+            processed_count += 1
+        
+        # Update last_checked timestamp
+        db.update_last_checked(db_user['id'], datetime.now())
+        
+        logger.info(f"Processed {processed_count} new emails for {user['name']}")
+        return processed_count
+        
+    except Exception as e:
+        logger.error(f"Error checking emails for {user['name']}: {str(e)}")
+        return 0
+    finally:
+        if 'gmail_checker' in locals():
+            gmail_checker.disconnect()
+
+
+def check_all_users_emails():
+    """Check emails for all configured users."""
+    logger.info("Starting email check for all users")
+    
+    total_processed = 0
+    for user in config.USERS:
+        try:
+            count = check_user_emails(user)
+            total_processed += count
+        except Exception as e:
+            logger.error(f"Failed to check emails for {user['name']}: {str(e)}")
+    
+    logger.info(f"Email check completed. Total new emails processed: {total_processed}")
+    return total_processed
+
+
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint for monitoring."""
@@ -131,7 +235,8 @@ def health_check():
             'configuration': {
                 'flask_env': config.FLASK_ENV,
                 'users_configured': config_summary['users_configured'],
-                'config_errors': len(config_summary['config_errors'])
+                'config_errors': len(config_summary['config_errors']),
+                'check_interval_minutes': config.CHECK_INTERVAL
             }
         }), 200
         
@@ -144,89 +249,28 @@ def health_check():
         }), 500
 
 
-@app.route('/webhook/email', methods=['POST'])
-def webhook_email():
-    """Mailgun webhook endpoint for processing forwarded emails."""
+@app.route('/check-emails', methods=['POST'])
+def manual_email_check():
+    """Manual trigger endpoint for checking emails (for testing)."""
     try:
-        # Log the incoming request
-        logger.info(f"Received webhook request from {request.remote_addr}")
+        logger.info("Manual email check triggered")
         
-        # Get request data
-        form_data = request.form.to_dict()
-        files_data = request.files.to_dict()
-        
-        # Log basic info about the email
-        recipient = form_data.get('recipient', 'unknown')
-        sender = form_data.get('sender', 'unknown')
-        subject = form_data.get('subject', 'no subject')
-        
-        logger.info(f"Email from {sender} to {recipient}: {subject}")
-        
-        # Find the user based on recipient email
-        user = config.get_user_by_mailgun_email(recipient)
-        if not user:
-            logger.warning(f"No user configured for recipient email: {recipient}")
-            return jsonify({
-                'status': 'error',
-                'message': f'No user configured for recipient: {recipient}'
-            }), 400
-        
-        logger.info(f"Processing email for user: {user['name']}")
-        
-        # Get or create user in database
-        db_user = db.get_user_by_mailgun_email(recipient)
-        if not db_user:
-            logger.info(f"Creating new user in database: {user['name']}")
-            user_id = db.create_user(
-                name=user['name'],
-                email=user['email'],
-                notion_token=user['notion_token'],
-                notion_database_id=user['notion_database_id'],
-                mailgun_email=user['mailgun_email']
-            )
-            db_user = {'id': user_id}
-        
-        # Parse email with dummy data for now (skipping complex parsing)
-        parsed_data = parse_email_simple(form_data, sender, subject)
-        
-        # Store in database
-        contact_id = db.create_recruiter_contact(
-            user_id=db_user['id'],
-            recruiter_name=parsed_data['recruiter_name'],
-            recruiter_email=parsed_data['recruiter_email'],
-            company=parsed_data['company'],
-            position=parsed_data['position'],
-            location=parsed_data['location'],
-            date_received=datetime.now(),
-            raw_email_data=json.dumps(form_data),
-            status="Recruiter Screen"
-        )
-        
-        logger.info(f"Created database entry with ID: {contact_id}")
-        
-        # TODO: Send to Notion (placeholder)
-        notion_page_id = create_notion_entry_placeholder(user, parsed_data)
-        
-        # Update database with Notion page ID
-        if notion_page_id:
-            db.update_notion_page_id(contact_id, notion_page_id)
-            logger.info(f"Updated contact {contact_id} with Notion page ID: {notion_page_id}")
+        # Check emails for all users
+        processed_count = check_all_users_emails()
         
         return jsonify({
             'status': 'success',
-            'message': 'Email processed and stored',
-            'user': user['name'],
-            'contact_id': contact_id,
-            'notion_page_id': notion_page_id,
-            'parsed_data': parsed_data,
+            'message': 'Email check completed',
+            'emails_processed': processed_count,
             'timestamp': datetime.now().isoformat()
         }), 200
         
     except Exception as e:
-        logger.error(f"Webhook processing failed: {str(e)}")
+        logger.error(f"Manual email check failed: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': 'Internal server error',
+            'message': 'Email check failed',
+            'error': str(e),
             'timestamp': datetime.now().isoformat()
         }), 500
 
@@ -240,8 +284,10 @@ def index():
         'timestamp': datetime.now().isoformat(),
         'endpoints': {
             'health': '/health',
-            'webhook': '/webhook/email'
-        }
+            'check_emails': '/check-emails (POST)'
+        },
+        'configured_users': len(config.USERS),
+        'check_interval_minutes': config.CHECK_INTERVAL
     })
 
 

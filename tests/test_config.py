@@ -23,29 +23,24 @@ def test_config_loading():
     print(f"   Flask environment: {config.FLASK_ENV}")
     print(f"   Flask host: {config.FLASK_HOST}")
     print(f"   Flask port: {config.FLASK_PORT}")
-    print(f"   Mailgun domain: {config.MAILGUN_DOMAIN}")
+    print(f"   Check interval: {config.CHECK_INTERVAL} minutes")
     
     # Test 2: Check users configuration
     print(f"\n2. Users configuration:")
     print(f"   Number of users: {len(config.USERS)}")
     for i, user in enumerate(config.USERS):
-        print(f"   User {i+1}: {user['name']} ({user['mailgun_email']})")
+        print(f"   User {i+1}: {user['name']} ({user['email']}) - Label: {user['gmail_label']}")
     
     # Test 3: Test user lookup functions
     print(f"\n3. Testing user lookup functions:")
     
-    # Test lookup by Mailgun email
-    test_email = config.USERS[0]['mailgun_email']
-    user = config.get_user_by_mailgun_email(test_email)
-    print(f"   Lookup by Mailgun email '{test_email}': {user['name'] if user else 'Not found'}")
-    
-    # Test lookup by regular email
+    # Test lookup by email
     test_email = config.USERS[0]['email']
     user = config.get_user_by_email(test_email)
-    print(f"   Lookup by regular email '{test_email}': {user['name'] if user else 'Not found'}")
+    print(f"   Lookup by email '{test_email}': {user['name'] if user else 'Not found'}")
     
     # Test lookup with non-existent email
-    user = config.get_user_by_mailgun_email("nonexistent@example.com")
+    user = config.get_user_by_email("nonexistent@example.com")
     print(f"   Lookup non-existent email: {user}")
     
     # Test 4: Configuration validation

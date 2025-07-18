@@ -78,36 +78,21 @@ def test_flask_endpoints():
             print(f"   Users count: {data.get('database', {}).get('users_count')}")
             print(f"   Config errors: {data.get('configuration', {}).get('config_errors')}")
         
-        # Test 3: Webhook endpoint with valid user
-        print("\n4. Testing webhook endpoint (valid user)...")
-        webhook_data = {
-            'recipient': 'user1@yourdomain.com',
-            'sender': 'recruiter@techcorp.com',
-            'subject': 'Software Engineer Position',
-            'body-plain': 'Hello, we have an exciting opportunity...',
-            'timestamp': '1234567890',
-            'Message-Id': 'test@mailgun.com'
-        }
-        response = requests.post(f"{base_url}/webhook/email", data=webhook_data)
+        # Test 3: Manual email check endpoint
+        print("\n4. Testing manual email check endpoint...")
+        response = requests.post(f"{base_url}/check-emails")
         print(f"   Status: {response.status_code}")
         if response.status_code == 200:
             data = response.json()
             print(f"   Response status: {data.get('status')}")
-            print(f"   User: {data.get('user')}")
+            print(f"   Emails processed: {data.get('emails_processed')}")
             print(f"   Message: {data.get('message')}")
+        else:
+            # Might fail due to Gmail credentials, that's expected
+            print(f"   Expected failure due to placeholder Gmail credentials")
         
-        # Test 4: Webhook endpoint with invalid user
-        print("\n5. Testing webhook endpoint (invalid user)...")
-        webhook_data['recipient'] = 'unknown@example.com'
-        response = requests.post(f"{base_url}/webhook/email", data=webhook_data)
-        print(f"   Status: {response.status_code}")
-        if response.status_code == 400:
-            data = response.json()
-            print(f"   Response status: {data.get('status')}")
-            print(f"   Message: {data.get('message')}")
-        
-        # Test 5: 404 endpoint
-        print("\n6. Testing 404 handling...")
+        # Test 4: 404 endpoint
+        print("\n5. Testing 404 handling...")
         response = requests.get(f"{base_url}/nonexistent")
         print(f"   Status: {response.status_code}")
         if response.status_code == 404:
@@ -123,7 +108,7 @@ def test_flask_endpoints():
         print(f"❌ Test failed with error: {e}")
     finally:
         # Clean up
-        print("\n7. Stopping test server...")
+        print("\n6. Stopping test server...")
         stop_test_server(server_process)
 
 

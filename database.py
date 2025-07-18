@@ -44,14 +44,14 @@ class DatabaseManager:
             return cursor.lastrowid
     
     # User operations
-    def create_user(self, name: str, email: str, notion_token: str, 
-                   notion_database_id: str, mailgun_email: str) -> int:
+    def create_user(self, name: str, email: str, gmail_app_password: str,
+                   gmail_label: str, notion_token: str, notion_database_id: str) -> int:
         """Create a new user and return the user ID."""
         query = """
-        INSERT INTO users (name, email, notion_token, notion_database_id, mailgun_email)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO users (name, email, gmail_app_password, gmail_label, notion_token, notion_database_id)
+        VALUES (?, ?, ?, ?, ?, ?)
         """
-        return self.execute_insert(query, (name, email, notion_token, notion_database_id, mailgun_email))
+        return self.execute_insert(query, (name, email, gmail_app_password, gmail_label, notion_token, notion_database_id))
     
     def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
         """Get a user by their email address."""
@@ -59,11 +59,10 @@ class DatabaseManager:
         results = self.execute_query(query, (email,))
         return results[0] if results else None
     
-    def get_user_by_mailgun_email(self, mailgun_email: str) -> Optional[Dict[str, Any]]:
-        """Get a user by their Mailgun forwarding email address."""
-        query = "SELECT * FROM users WHERE mailgun_email = ?"
-        results = self.execute_query(query, (mailgun_email,))
-        return results[0] if results else None
+    def update_last_checked(self, user_id: int, timestamp: datetime) -> bool:
+        """Update the last_checked timestamp for a user."""
+        query = "UPDATE users SET last_checked = ? WHERE id = ?"
+        return self.execute_update(query, (timestamp, user_id)) > 0
     
     def get_all_users(self) -> List[Dict[str, Any]]:
         """Get all users."""
@@ -71,20 +70,20 @@ class DatabaseManager:
         return self.execute_query(query)
     
     # Recruiter contact operations
-    def create_recruiter_contact(self, user_id: int, recruiter_name: str, 
-                               recruiter_email: str, company: str, position: str,
-                               location: str, date_received: datetime, 
+    def create_recruiter_contact(self, user_id: int, gmail_message_id: str,
+                               recruiter_name: str, recruiter_email: str, company: str, 
+                               position: str, location: str, date_received: datetime, 
                                raw_email_data: str, status: str = "Recruiter Screen",
                                notion_page_id: str = None) -> int:
         """Create a new recruiter contact entry and return the contact ID."""
         query = """
         INSERT INTO recruiter_contacts 
-        (user_id, recruiter_name, recruiter_email, company, position, location, 
+        (user_id, gmail_message_id, recruiter_name, recruiter_email, company, position, location, 
          status, date_received, notion_page_id, raw_email_data)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         return self.execute_insert(query, (
-            user_id, recruiter_name, recruiter_email, company, position, 
+            user_id, gmail_message_id, recruiter_name, recruiter_email, company, position, 
             location, status, date_received, notion_page_id, raw_email_data
         ))
     
@@ -97,15 +96,10 @@ class DatabaseManager:
         """
         return self.execute_query(query, (user_id,))
     
-    def get_contact_by_recruiter_email(self, user_id: int, recruiter_email: str) -> Optional[Dict[str, Any]]:
-        """Check if a recruiter contact already exists for a user."""
-        query = """
-        SELECT * FROM recruiter_contacts 
-        WHERE user_id = ? AND recruiter_email = ?
-        ORDER BY created_at DESC
-        LIMIT 1
-        """
-        results = self.execute_query(query, (user_id, recruiter_email))
+    def get_contact_by_gmail_message_id(self, gmail_message_id: str) -> Optional[Dict[str, Any]]:
+        """Check if a Gmail message has already been processed."""
+        query = "SELECT * FROM recruiter_contacts WHERE gmail_message_id = ?"
+        results = self.execute_query(query, (gmail_message_id,))
         return results[0] if results else None
     
     def update_notion_page_id(self, contact_id: int, notion_page_id: str) -> bool:

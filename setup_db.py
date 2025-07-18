@@ -20,11 +20,13 @@ def create_tables(db_path: str = "database.db"):
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY,
-        name TEXT NOT NULL,
-        email TEXT UNIQUE NOT NULL,
-        notion_token TEXT NOT NULL,
-        notion_database_id TEXT NOT NULL,
-        mailgun_email TEXT UNIQUE NOT NULL,
+        name TEXT,
+        email TEXT UNIQUE,
+        gmail_app_password TEXT,
+        gmail_label TEXT DEFAULT 'Recruiters',
+        notion_token TEXT,
+        notion_database_id TEXT,
+        last_checked TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """)
@@ -33,7 +35,8 @@ def create_tables(db_path: str = "database.db"):
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS recruiter_contacts (
         id INTEGER PRIMARY KEY,
-        user_id INTEGER NOT NULL,
+        user_id INTEGER,
+        gmail_message_id TEXT UNIQUE,
         recruiter_name TEXT,
         recruiter_email TEXT,
         company TEXT,
@@ -43,7 +46,7 @@ def create_tables(db_path: str = "database.db"):
         date_received TIMESTAMP,
         notion_page_id TEXT,
         raw_email_data TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users (id)
     )
     """)
@@ -60,10 +63,10 @@ def create_tables(db_path: str = "database.db"):
     ON recruiter_contacts (user_id, recruiter_email)
     """)
     
-    # Create index on mailgun_email for fast user lookup
+    # Create index on email for fast user lookup
     cursor.execute("""
-    CREATE INDEX IF NOT EXISTS idx_users_mailgun_email 
-    ON users (mailgun_email)
+    CREATE INDEX IF NOT EXISTS idx_users_email 
+    ON users (email)
     """)
     
     conn.commit()
@@ -87,17 +90,19 @@ def seed_test_data(db_path: str = "database.db"):
     test_users = [
         {
             'name': 'Test User 1',
-            'email': 'test1@example.com',
+            'email': 'test1@gmail.com',
+            'gmail_app_password': 'abcd efgh ijkl mnop',
+            'gmail_label': 'Recruiters',
             'notion_token': 'secret_token_placeholder_1',
-            'notion_database_id': 'database_id_placeholder_1',
-            'mailgun_email': 'user1@yourdomain.com'
+            'notion_database_id': 'database_id_placeholder_1'
         },
         {
             'name': 'Test User 2', 
-            'email': 'test2@example.com',
+            'email': 'test2@gmail.com',
+            'gmail_app_password': 'efgh ijkl mnop qrst',
+            'gmail_label': 'Recruiters',
             'notion_token': 'secret_token_placeholder_2',
-            'notion_database_id': 'database_id_placeholder_2',
-            'mailgun_email': 'user2@yourdomain.com'
+            'notion_database_id': 'database_id_placeholder_2'
         }
     ]
     
