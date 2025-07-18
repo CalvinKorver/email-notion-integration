@@ -7,41 +7,70 @@ from typing import Optional, Dict, List, Any
 class DatabaseManager:
     def __init__(self, db_path: str = "database.db"):
         self.db_path = db_path
+        self.is_in_memory = db_path == ":memory:"
+        self._connection = None
         self.ensure_database_exists()
     
     def ensure_database_exists(self):
         """Ensure the database file exists and create if it doesn't."""
-        if not os.path.exists(self.db_path):
+        if not self.is_in_memory and not os.path.exists(self.db_path):
             # Create empty database file
             open(self.db_path, 'a').close()
     
     def get_connection(self):
         """Get a database connection."""
-        return sqlite3.connect(self.db_path)
+        if self.is_in_memory:
+            # For in-memory databases, reuse the same connection
+            if self._connection is None:
+                self._connection = sqlite3.connect(self.db_path)
+            return self._connection
+        else:
+            return sqlite3.connect(self.db_path)
     
     def execute_query(self, query: str, params: tuple = ()) -> List[Dict[str, Any]]:
         """Execute a SELECT query and return results as list of dictionaries."""
-        with self.get_connection() as conn:
+        conn = self.get_connection()
+        if self.is_in_memory:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute(query, params)
             return [dict(row) for row in cursor.fetchall()]
+        else:
+            with conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                cursor.execute(query, params)
+                return [dict(row) for row in cursor.fetchall()]
     
     def execute_update(self, query: str, params: tuple = ()) -> int:
         """Execute an INSERT/UPDATE/DELETE query and return affected row count."""
-        with self.get_connection() as conn:
+        conn = self.get_connection()
+        if self.is_in_memory:
             cursor = conn.cursor()
             cursor.execute(query, params)
             conn.commit()
             return cursor.rowcount
+        else:
+            with conn:
+                cursor = conn.cursor()
+                cursor.execute(query, params)
+                conn.commit()
+                return cursor.rowcount
     
     def execute_insert(self, query: str, params: tuple = ()) -> int:
         """Execute an INSERT query and return the new row ID."""
-        with self.get_connection() as conn:
+        conn = self.get_connection()
+        if self.is_in_memory:
             cursor = conn.cursor()
             cursor.execute(query, params)
             conn.commit()
             return cursor.lastrowid
+        else:
+            with conn:
+                cursor = conn.cursor()
+                cursor.execute(query, params)
+                conn.commit()
+                return cursor.lastrowid
     
     # User operations
     def create_user(self, name: str, email: str, gmail_label: str, notion_token: str, notion_database_id: str) -> int:
@@ -170,3 +199,9 @@ class DatabaseManager:
             status=parsed_data.get('status', 'Applied'),
             notion_page_id=notion_page_id
         )
+    
+    def close(self):
+        """Close the database connection if it's in-memory."""
+        if self.is_in_memory and self._connection:
+            self._connection.close()
+            self._connection = None
