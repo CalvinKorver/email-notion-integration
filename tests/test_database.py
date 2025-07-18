@@ -27,7 +27,7 @@ def test_database_operations():
     db = DatabaseManager(test_db_path)
     
     # Create tables (using the setup script's logic)
-    from setup_db import create_tables
+    from scripts.setup_db import create_tables
     create_tables(test_db_path)
     
     print("Testing database operations...")
