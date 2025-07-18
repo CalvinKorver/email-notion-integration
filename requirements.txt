@@ -4,3 +4,5 @@ python-dotenv==1.0.0
 APScheduler==3.10.4
 secure-smtplib==0.1.1
 notion-client==2.2.1
+pytest==7.4.3
+gunicorn==21.2.0
