@@ -6,8 +6,10 @@ Connects to Gmail using IMAP and retrieves new emails from specified labels.
 
 import imaplib
 import email
+import email.message
+import email.utils
 from email.header import decode_header
-from datetime import datetime, timedelta
+from datetime import datetime
 import logging
 from typing import List, Dict, Any, Optional
 import json
@@ -72,6 +74,12 @@ class GmailChecker:
         date_str = msg.get('Date', '')
         message_id = msg.get('Message-ID', '')
         
+        # Extract thread headers for conversation detection
+        in_reply_to = msg.get('In-Reply-To', '')
+        references = msg.get('References', '')
+        thread_topic = msg.get('Thread-Topic', '')
+        thread_index = msg.get('Thread-Index', '')
+        
         # Parse date
         try:
             date_received = email.utils.parsedate_to_datetime(date_str)
@@ -120,20 +128,28 @@ class GmailChecker:
             'date_received': date_received,
             'body_text': body_text,
             'body_html': body_html,
-            'raw_email': msg.as_string()
+            'raw_email': msg.as_string(),
+            # Thread detection headers
+            'in_reply_to': in_reply_to,
+            'references': references,
+            'thread_topic': thread_topic,
+            'thread_index': thread_index
         }
     
-    def check_new_emails(self, label: str = 'Recruiters', since_date: Optional[datetime] = None) -> List[Dict[str, Any]]:
+    def check_new_emails(self, label) -> List[Dict[str, Any]]:
         """
-        Check for new emails in the specified Gmail label.
+        Check for all emails in the specified Gmail label.
         
         Args:
-            label: Gmail label to search (default: 'Recruiters')
-            since_date: Only check emails since this date (default: last 7 days)
+            label: Gmail label to search
         
         Returns:
             List of parsed email messages
         """
+        if not label:
+            logger.error("Label must be specified for checking emails")
+            raise ValueError("Label must be specified")
+
         if not self.connection:
             if not self.connect():
                 return []
@@ -151,13 +167,9 @@ class GmailChecker:
                 logger.error(f"Failed to select label '{label}' for {self.email}")
                 return []
             
-            # Build search criteria
-            if since_date is None:
-                since_date = datetime.now() - timedelta(days=7)
-            
-            # Format date for IMAP search (DD-MMM-YYYY)
-            since_str = since_date.strftime("%d-%b-%Y")
-            search_criteria = f'(SINCE "{since_str}")'
+            # Get ALL emails in the label - we'll filter by database later
+            # If an email has the label, we want to process it regardless of date
+            search_criteria = 'ALL'
             
             # Search for emails
             status, message_ids = self.connection.search(None, search_criteria)
@@ -236,7 +248,7 @@ def test_gmail_connection(email_address: str, app_password: str, label: str = 'R
     
     # Test email checking
     try:
-        emails = checker.check_new_emails(label=label, since_date=datetime.now() - timedelta(days=1))
+        emails = checker.check_new_emails(label=label)
         logger.info(f"Email check test successful: found {len(emails)} recent emails")
         
         # Log details of first email if any

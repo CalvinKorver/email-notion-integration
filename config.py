@@ -8,59 +8,46 @@ load_dotenv()
 DATABASE_PATH = os.getenv('DATABASE_PATH', 'database.db')
 
 # Email checking interval (minutes)
-CHECK_INTERVAL = int(os.getenv('CHECK_INTERVAL_MINUTES', '5'))
+CHECK_INTERVAL = int(os.getenv('CHECK_INTERVAL_MINUTES'))
+
+# Email lookback period (days) - how far back to check for emails on first run
+EMAIL_LOOKBACK_DAYS = int(os.getenv('EMAIL_LOOKBACK_DAYS', '3'))
 
 # Flask configuration
 FLASK_ENV = os.getenv('FLASK_ENV', 'development')
 FLASK_DEBUG = FLASK_ENV == 'development'
 FLASK_HOST = os.getenv('FLASK_HOST', '0.0.0.0')
-FLASK_PORT = int(os.getenv('FLASK_PORT', '5000'))
+FLASK_PORT = int(os.getenv('FLASK_PORT', '5001'))
 
-# Hardcoded user configuration
-# In production, these would be loaded from the database
-# For initial setup, we define the users here for easy configuration
-USERS = [
-    {
-        'name': 'Your Name',
-        'email': 'your.personal@gmail.com',
-        'gmail_app_password': os.getenv('USER1_GMAIL_APP_PASSWORD', 'abcd efgh ijkl mnop'),
-        'gmail_label': os.getenv('USER1_GMAIL_LABEL', 'Recruiters'),
-        'notion_token': os.getenv('USER1_NOTION_TOKEN', 'secret_token_placeholder_1'),
-        'notion_database_id': os.getenv('USER1_NOTION_DATABASE_ID', 'database_id_placeholder_1')
-    },
-    {
-        'name': 'User Two',
-        'email': 'user2@gmail.com', 
-        'gmail_app_password': os.getenv('USER2_GMAIL_APP_PASSWORD', 'efgh ijkl mnop qrst'),
-        'gmail_label': os.getenv('USER2_GMAIL_LABEL', 'Recruiters'),
-        'notion_token': os.getenv('USER2_NOTION_TOKEN', 'secret_token_placeholder_2'),
-        'notion_database_id': os.getenv('USER2_NOTION_DATABASE_ID', 'database_id_placeholder_2')
-    },
-    {
-        'name': 'User Three',
-        'email': 'user3@gmail.com',
-        'gmail_app_password': os.getenv('USER3_GMAIL_APP_PASSWORD', 'ijkl mnop qrst uvwx'),
-        'gmail_label': os.getenv('USER3_GMAIL_LABEL', 'Recruiters'),
-        'notion_token': os.getenv('USER3_NOTION_TOKEN', 'secret_token_placeholder_3'),
-        'notion_database_id': os.getenv('USER3_NOTION_DATABASE_ID', 'database_id_placeholder_3')
-    }
-]
+# Single user configuration from environment variables
+# Gmail password is NOT stored in database for security
+USER_CONFIG = {
+    'name': os.getenv('USER_NAME', 'Your Name'),
+    'email': os.getenv('GMAIL_EMAIL', 'your.personal@gmail.com'),
+    'gmail_app_password': os.getenv('GMAIL_PASSWORD', 'abcd efgh ijkl mnop'),
+    'gmail_label': os.getenv('GMAIL_LABEL', 'Recruiters'),
+    'notion_token': os.getenv('NOTION_API_KEY', 'secret_token_placeholder_1'),
+    'notion_database_id': os.getenv('DATABASE_ID', 'database_id_placeholder_1')
+}
+
+# Legacy USERS list for backwards compatibility
+USERS = [USER_CONFIG]
 
 # Validation function
 def validate_config():
     """Validate that required configuration is present."""
     errors = []
     
-    # Check that users have valid Gmail and Notion configuration
-    for i, user in enumerate(USERS):
-        if user['gmail_app_password'].startswith('abcd') or user['gmail_app_password'].startswith('efgh') or user['gmail_app_password'].startswith('ijkl'):
-            errors.append(f"User {i+1} ({user['name']}) needs a real Gmail app password")
-        
-        if user['notion_token'].startswith('secret_token_placeholder'):
-            errors.append(f"User {i+1} ({user['name']}) needs a real Notion token")
-        
-        if user['notion_database_id'].startswith('database_id_placeholder'):
-            errors.append(f"User {i+1} ({user['name']}) needs a real Notion database ID")
+    # Check that user has valid Gmail and Notion configuration
+    user = USER_CONFIG
+    if user['gmail_app_password'].startswith('abcd') or user['gmail_app_password'].startswith('efgh') or user['gmail_app_password'].startswith('ijkl'):
+        errors.append(f"User ({user['name']}) needs a real Gmail app password")
+    
+    if user['notion_token'].startswith('secret_token_placeholder'):
+        errors.append(f"User ({user['name']}) needs a real Notion token")
+    
+    if user['notion_database_id'].startswith('database_id_placeholder'):
+        errors.append(f"User ({user['name']}) needs a real Notion database ID")
     
     return errors
 
@@ -81,7 +68,7 @@ def get_config_summary():
         'flask_host': FLASK_HOST,
         'flask_port': FLASK_PORT,
         'check_interval_minutes': CHECK_INTERVAL,
-        'users_configured': len(USERS),
-        'user_emails': [user['email'] for user in USERS],
+        'user_configured': USER_CONFIG['name'],
+        'user_email': USER_CONFIG['email'],
         'config_errors': validate_config()
     }

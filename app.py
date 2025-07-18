@@ -14,6 +14,7 @@ import json
 import config
 from database import DatabaseManager
 from email_checker import GmailChecker
+from scheduler import get_scheduler, start_scheduler, stop_scheduler, get_scheduler_status, run_manual_check
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -118,22 +119,23 @@ def check_user_emails(user):
     logger.info(f"Checking emails for user: {user['name']} ({user['email']})")
     
     try:
-        # Get or create user in database
+        # Get or create user in database (password NOT stored for security)
         db_user = db.get_user_by_email(user['email'])
         if not db_user:
             logger.info(f"Creating new user in database: {user['name']}")
             user_id = db.create_user(
                 name=user['name'],
                 email=user['email'],
-                gmail_app_password=user['gmail_app_password'],
                 gmail_label=user['gmail_label'],
                 notion_token=user['notion_token'],
                 notion_database_id=user['notion_database_id']
             )
             db_user = {'id': user_id, 'last_checked': None}
         
-        # Initialize Gmail checker
+        # Initialize Gmail checker and email parser
         gmail_checker = GmailChecker(user['email'], user['gmail_app_password'])
+        from email_parser import EmailParser
+        email_parser = EmailParser(user['email'])
         
         # Determine since_date based on last_checked
         since_date = db_user.get('last_checked')
@@ -144,8 +146,7 @@ def check_user_emails(user):
         
         # Check for new emails
         emails = gmail_checker.check_new_emails(
-            label=user['gmail_label'],
-            since_date=since_date
+            label=user['gmail_label']
         )
         
         processed_count = 0
@@ -155,8 +156,13 @@ def check_user_emails(user):
                 logger.debug(f"Skipping already processed email: {email_data['message_id']}")
                 continue
             
+            # Check if this email should be processed (thread filtering)
+            if not email_parser.should_process_email(email_data):
+                logger.info(f"Skipping email based on thread filtering: {email_data.get('subject', 'No subject')}")
+                continue
+            
             # Parse email data
-            parsed_data = parse_recruiter_email_simple(email_data)
+            parsed_data = email_parser.parse_recruiter_email(email_data)
             
             # Store in database
             contact_id = db.create_recruiter_contact(
@@ -199,19 +205,16 @@ def check_user_emails(user):
 
 
 def check_all_users_emails():
-    """Check emails for all configured users."""
-    logger.info("Starting email check for all users")
+    """Check emails for the configured user."""
+    logger.info("Starting email check for user")
     
-    total_processed = 0
-    for user in config.USERS:
-        try:
-            count = check_user_emails(user)
-            total_processed += count
-        except Exception as e:
-            logger.error(f"Failed to check emails for {user['name']}: {str(e)}")
-    
-    logger.info(f"Email check completed. Total new emails processed: {total_processed}")
-    return total_processed
+    try:
+        count = check_user_emails(config.USER_CONFIG)
+        logger.info(f"Email check completed. New emails processed: {count}")
+        return count
+    except Exception as e:
+        logger.error(f"Failed to check emails for {config.USER_CONFIG['name']}: {str(e)}")
+        return 0
 
 
 @app.route('/health', methods=['GET'])
@@ -234,7 +237,7 @@ def health_check():
             },
             'configuration': {
                 'flask_env': config.FLASK_ENV,
-                'users_configured': config_summary['users_configured'],
+                'user_configured': config_summary['user_configured'],
                 'config_errors': len(config_summary['config_errors']),
                 'check_interval_minutes': config.CHECK_INTERVAL
             }
@@ -253,17 +256,23 @@ def health_check():
 def manual_email_check():
     """Manual trigger endpoint for checking emails (for testing)."""
     try:
-        logger.info("Manual email check triggered")
+        logger.info("Manual email check triggered via API")
         
-        # Check emails for all users
-        processed_count = check_all_users_emails()
+        # Use the scheduler's manual check function
+        result = run_manual_check()
         
-        return jsonify({
-            'status': 'success',
-            'message': 'Email check completed',
-            'emails_processed': processed_count,
-            'timestamp': datetime.now().isoformat()
-        }), 200
+        if result['success']:
+            return jsonify({
+                'status': 'success',
+                'message': result['message'],
+                'timestamp': datetime.now().isoformat()
+            }), 200
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': result['message'],
+                'timestamp': datetime.now().isoformat()
+            }), 500
         
     except Exception as e:
         logger.error(f"Manual email check failed: {str(e)}")
@@ -275,19 +284,102 @@ def manual_email_check():
         }), 500
 
 
+@app.route('/scheduler/status', methods=['GET'])
+def scheduler_status():
+    """Get the current status of the background scheduler."""
+    try:
+        status = get_scheduler_status()
+        return jsonify({
+            'status': 'success',
+            'scheduler': status,
+            'timestamp': datetime.now().isoformat()
+        }), 200
+    except Exception as e:
+        logger.error(f"Error getting scheduler status: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': 'Failed to get scheduler status',
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }), 500
+
+
+@app.route('/scheduler/start', methods=['POST'])
+def start_scheduler_endpoint():
+    """Start the background scheduler."""
+    try:
+        scheduler = get_scheduler()
+        if scheduler.is_running:
+            return jsonify({
+                'status': 'success',
+                'message': 'Scheduler is already running',
+                'timestamp': datetime.now().isoformat()
+            }), 200
+        
+        start_scheduler()
+        return jsonify({
+            'status': 'success',
+            'message': 'Scheduler started successfully',
+            'timestamp': datetime.now().isoformat()
+        }), 200
+    except Exception as e:
+        logger.error(f"Error starting scheduler: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': 'Failed to start scheduler',
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }), 500
+
+
+@app.route('/scheduler/stop', methods=['POST'])
+def stop_scheduler_endpoint():
+    """Stop the background scheduler."""
+    try:
+        scheduler = get_scheduler()
+        if not scheduler.is_running:
+            return jsonify({
+                'status': 'success',
+                'message': 'Scheduler is already stopped',
+                'timestamp': datetime.now().isoformat()
+            }), 200
+        
+        stop_scheduler()
+        return jsonify({
+            'status': 'success',
+            'message': 'Scheduler stopped successfully',
+            'timestamp': datetime.now().isoformat()
+        }), 200
+    except Exception as e:
+        logger.error(f"Error stopping scheduler: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': 'Failed to stop scheduler',
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }), 500
+
+
 @app.route('/', methods=['GET'])
 def index():
     """Basic index route."""
+    # Get scheduler status
+    scheduler_info = get_scheduler_status()
+    
     return jsonify({
         'service': 'Recruiter Email Tracker',
         'status': 'running',
         'timestamp': datetime.now().isoformat(),
         'endpoints': {
             'health': '/health',
-            'check_emails': '/check-emails (POST)'
+            'check_emails': '/check-emails (POST)',
+            'scheduler_status': '/scheduler/status',
+            'scheduler_start': '/scheduler/start (POST)',
+            'scheduler_stop': '/scheduler/stop (POST)'
         },
-        'configured_users': len(config.USERS),
-        'check_interval_minutes': config.CHECK_INTERVAL
+        'configured_user': config.USER_CONFIG['name'],
+        'check_interval_minutes': config.CHECK_INTERVAL,
+        'scheduler': scheduler_info
     })
 
 
@@ -326,6 +418,23 @@ if __name__ == '__main__':
     # Log configuration summary
     summary = config.get_config_summary()
     logger.info(f"Configuration: {json.dumps(summary, indent=2)}")
+    
+    # Start the background scheduler
+    try:
+        logger.info("Starting background email scheduler...")
+        start_scheduler()
+        logger.info("Background scheduler started successfully")
+        
+        # Run initial email check immediately
+        logger.info("Running initial email check...")
+        initial_result = run_manual_check()
+        if initial_result['success']:
+            logger.info("Initial email check completed successfully")
+        else:
+            logger.warning(f"Initial email check failed: {initial_result['message']}")
+    except Exception as e:
+        logger.error(f"Failed to start background scheduler: {str(e)}")
+        logger.warning("Application will continue without automatic email checking")
     
     # Start Flask app
     app.run(

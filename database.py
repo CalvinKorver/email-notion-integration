@@ -44,14 +44,13 @@ class DatabaseManager:
             return cursor.lastrowid
     
     # User operations
-    def create_user(self, name: str, email: str, gmail_app_password: str,
-                   gmail_label: str, notion_token: str, notion_database_id: str) -> int:
-        """Create a new user and return the user ID."""
+    def create_user(self, name: str, email: str, gmail_label: str, notion_token: str, notion_database_id: str) -> int:
+        """Create a new user and return the user ID. Gmail password is NOT stored for security."""
         query = """
-        INSERT INTO users (name, email, gmail_app_password, gmail_label, notion_token, notion_database_id)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO users (name, email, gmail_label, notion_token, notion_database_id)
+        VALUES (?, ?, ?, ?, ?)
         """
-        return self.execute_insert(query, (name, email, gmail_app_password, gmail_label, notion_token, notion_database_id))
+        return self.execute_insert(query, (name, email, gmail_label, notion_token, notion_database_id))
     
     def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
         """Get a user by their email address."""
@@ -102,6 +101,12 @@ class DatabaseManager:
         results = self.execute_query(query, (gmail_message_id,))
         return results[0] if results else None
     
+    def get_contact_by_company(self, user_id: int, company: str) -> Optional[Dict[str, Any]]:
+        """Check if a company already exists for a user."""
+        query = "SELECT * FROM recruiter_contacts WHERE user_id = ? AND company = ? ORDER BY date_received DESC LIMIT 1"
+        results = self.execute_query(query, (user_id, company))
+        return results[0] if results else None
+    
     def update_notion_page_id(self, contact_id: int, notion_page_id: str) -> bool:
         """Update the Notion page ID for a recruiter contact."""
         query = "UPDATE recruiter_contacts SET notion_page_id = ? WHERE id = ?"
@@ -117,3 +122,51 @@ class DatabaseManager:
         """
         results = self.execute_query(query, (user_id,))
         return {row['status']: row['count'] for row in results}
+    
+    def get_user_last_check(self, email: str) -> Optional[datetime]:
+        """Get the last_checked timestamp for a user by email."""
+        query = "SELECT last_checked FROM users WHERE email = ?"
+        results = self.execute_query(query, (email,))
+        if results and results[0]['last_checked']:
+            # Convert string back to datetime if needed
+            last_checked = results[0]['last_checked']
+            if isinstance(last_checked, str):
+                try:
+                    return datetime.fromisoformat(last_checked)
+                except ValueError:
+                    return None
+            return last_checked
+        return None
+    
+    def update_user_last_check(self, email: str, timestamp: datetime) -> bool:
+        """Update the last_checked timestamp for a user by email."""
+        query = "UPDATE users SET last_checked = ? WHERE email = ?"
+        return self.execute_update(query, (timestamp, email)) > 0
+    
+    def email_already_processed(self, gmail_message_id: str) -> bool:
+        """Check if an email has already been processed."""
+        contact = self.get_contact_by_gmail_message_id(gmail_message_id)
+        return contact is not None
+    
+    def log_recruiter_contact(self, user_email: str, gmail_message_id: str, 
+                            parsed_data: Dict[str, Any], notion_page_id: Optional[str] = None) -> int:
+        """Log a recruiter contact with parsed data."""
+        # Get user ID from email
+        user = self.get_user_by_email(user_email)
+        if not user:
+            raise ValueError(f"User not found with email: {user_email}")
+        
+        # Create the contact entry
+        return self.create_recruiter_contact(
+            user_id=user['id'],
+            gmail_message_id=gmail_message_id,
+            recruiter_name=parsed_data.get('recruiter_name', 'Unknown'),
+            recruiter_email=parsed_data.get('recruiter_email', 'unknown@example.com'),
+            company=parsed_data.get('company', 'Unknown Company'),
+            position=parsed_data.get('position', 'Unknown Position'),
+            location=parsed_data.get('location', 'Unknown Location'),
+            date_received=parsed_data.get('date_received', datetime.now()),
+            raw_email_data=parsed_data.get('raw_email', ''),
+            status=parsed_data.get('status', 'Applied'),
+            notion_page_id=notion_page_id
+        )
