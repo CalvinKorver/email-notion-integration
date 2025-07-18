@@ -5,14 +5,18 @@ Test script using real credentials to verify end-to-end functionality.
 
 import logging
 import os
+import sys
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 
 # Load environment variables
 load_dotenv()
 
+# Add parent directory to path to import modules
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 # Import our modules
-from config import USERS, validate_config, get_config_summary
+from config import USER_CONFIG, validate_config, get_config_summary
 from email_checker import test_gmail_connection
 from notion_api import NotionClient
 from scheduler import get_scheduler
@@ -30,7 +34,7 @@ def test_real_credentials():
     # Test 1: Configuration validation
     print("\n1. Testing Configuration...")
     config_summary = get_config_summary()
-    print(f"   Users configured: {config_summary['users_configured']}")
+    print(f"   User configured: {config_summary['user_configured']}")
     print(f"   Configuration errors: {len(config_summary['config_errors'])}")
     
     if config_summary['config_errors']:
@@ -38,8 +42,8 @@ def test_real_credentials():
         for error in config_summary['config_errors']:
             print(f"     - {error}")
     
-    # Get the first user (your configuration)
-    user = USERS[0]
+    # Get the user configuration
+    user = USER_CONFIG
     print(f"\n   User: {user['name']}")
     print(f"   Email: {user['email']}")
     print(f"   Gmail Label: {user['gmail_label']}")

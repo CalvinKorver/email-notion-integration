@@ -15,6 +15,8 @@ import config
 from database import DatabaseManager
 from email_checker import GmailChecker
 from scheduler import get_scheduler, start_scheduler, stop_scheduler, get_scheduler_status, run_manual_check
+import subprocess
+import sys
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -360,6 +362,64 @@ def stop_scheduler_endpoint():
         }), 500
 
 
+@app.route('/tests', methods=['GET'])
+def run_tests():
+    """Run all tests and return results."""
+    try:
+        # Get the path to the test runner script
+        test_runner_path = os.path.join(os.path.dirname(__file__), 'scripts', 'run_tests.py')
+        
+        # Run the test runner script
+        result = subprocess.run([
+            sys.executable, test_runner_path
+        ], capture_output=True, text=True, timeout=120)
+        
+        # Parse the output to determine success/failure
+        output_lines = result.stdout.strip().split('\n')
+        
+        # Extract test summary from output
+        test_summary = {}
+        for line in output_lines:
+            if line.startswith('Total tests:'):
+                test_summary['total_tests'] = int(line.split(':')[1].strip())
+            elif line.startswith('Passed:'):
+                test_summary['passed'] = int(line.split(':')[1].strip())
+            elif line.startswith('Failed:'):
+                test_summary['failed'] = int(line.split(':')[1].strip())
+            elif line.startswith('Success rate:'):
+                test_summary['success_rate'] = float(line.split(':')[1].strip().replace('%', ''))
+        
+        # Determine overall status
+        overall_status = 'passed' if result.returncode == 0 else 'failed'
+        
+        return jsonify({
+            'status': 'success',
+            'test_results': {
+                'overall_status': overall_status,
+                'returncode': result.returncode,
+                'summary': test_summary,
+                'output': result.stdout,
+                'error': result.stderr if result.stderr else None
+            },
+            'timestamp': datetime.now().isoformat()
+        }), 200
+        
+    except subprocess.TimeoutExpired:
+        return jsonify({
+            'status': 'error',
+            'message': 'Tests timed out after 120 seconds',
+            'timestamp': datetime.now().isoformat()
+        }), 500
+    except Exception as e:
+        logger.error(f"Error running tests: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': 'Failed to run tests',
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }), 500
+
+
 @app.route('/', methods=['GET'])
 def index():
     """Basic index route."""
@@ -375,7 +435,8 @@ def index():
             'check_emails': '/check-emails (POST)',
             'scheduler_status': '/scheduler/status',
             'scheduler_start': '/scheduler/start (POST)',
-            'scheduler_stop': '/scheduler/stop (POST)'
+            'scheduler_stop': '/scheduler/stop (POST)',
+            'tests': '/tests'
         },
         'configured_user': config.USER_CONFIG['name'],
         'check_interval_minutes': config.CHECK_INTERVAL,

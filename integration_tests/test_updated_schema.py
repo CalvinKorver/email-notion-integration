@@ -4,9 +4,14 @@ Test script to verify the updated schema mapping works correctly.
 """
 
 import os
+import sys
 import logging
 from datetime import datetime
 from dotenv import load_dotenv
+
+# Add parent directory to path to import modules
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from notion_api import NotionClient
 
 # Load environment variables
