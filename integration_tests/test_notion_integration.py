@@ -10,7 +10,13 @@ Usage:
 """
 
 import logging
+import os
+import sys
 from datetime import datetime
+
+# Add parent directory to path to import modules
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from notion_api import NotionClient
 
 # Configure logging
