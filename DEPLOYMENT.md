@@ -9,10 +9,18 @@
 
 2. **Set Environment Variables**
    - In Railway dashboard, go to Variables tab
-   - Add all variables from `.env.production`
+   - Add all required variables (see list below)
+   - **IMPORTANT**: Make sure `DATABASE_PATH="/data/database.db"` for persistent storage
 
-3. **Deploy**
-   - Railway will automatically build and deploy
+3. **Add Volume for Database Persistence**
+   - In Railway dashboard, go to Settings
+   - Click "Volume" and add a new volume
+   - Mount path: `/data`
+   - This ensures your SQLite database persists across deployments
+
+4. **Deploy**
+   - Railway will automatically build and deploy using `nixpacks.toml`
+   - Database tables will be created automatically on first deploy
    - Your app will be available at the generated URL
 
 ## Render Deployment
@@ -32,19 +40,26 @@
 
 ## Environment Variables Required
 
-Copy these from `.env.production`:
-- `DATABASE_PATH`
-- `FLASK_ENV`
-- `FLASK_HOST`
-- `FLASK_PORT`
-- `EMAIL_LOOKBACK_DAYS`
-- `CHECK_INTERVAL_MINUTES`
-- `GMAIL_EMAIL`
-- `GMAIL_PASSWORD`
-- `GMAIL_LABEL`
-- `USER_NAME`
-- `NOTION_API_KEY`
-- `DATABASE_ID`
+### Railway-Specific Variables
+- `DATABASE_PATH="/data/database.db"` (for persistent storage)
+- `PYTHONUNBUFFERED="1"` (already set in railway.toml)
+
+### Application Variables
+Copy these from your local `.env` file:
+- `FLASK_ENV="production"`
+- `CHECK_INTERVAL_MINUTES="30"` (or your preferred interval)
+- `EMAIL_LOOKBACK_DAYS="3"`
+- `GMAIL_EMAIL` (your Gmail address)
+- `GMAIL_PASSWORD` (Gmail app password)
+- `GMAIL_LABEL` (e.g., "Recruiters")
+- `USER_NAME` (your name)
+- `NOTION_API_KEY` (your Notion integration token)
+- `DATABASE_ID` (your Notion database ID)
+
+### Notes
+- `PORT` is automatically provided by Railway
+- `FLASK_HOST` defaults to `0.0.0.0` (correct for Railway)
+- Database will be automatically initialized on first deployment
 
 ## Testing Production Deploy
 

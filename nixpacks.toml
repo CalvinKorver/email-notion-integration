@@ -1,0 +1,10 @@
+[build]
+python_version = "3.11"
+
+[start]
+cmd = "gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120"
+
+[variables]
+PYTHONUNBUFFERED = "1"
+FLASK_ENV = "production"
+FLASK_HOST = "0.0.0.0"

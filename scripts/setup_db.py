@@ -6,7 +6,13 @@ Creates the necessary tables and optionally seeds with initial data.
 
 import sqlite3
 import os
+import sys
+
+# Add parent directory to path to import modules
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from database import DatabaseManager
+import config
 
 
 def create_tables(db_path: str = "database.db"):
@@ -141,13 +147,25 @@ def main():
     
     print("=== Recruiter Email Tracker - Database Setup ===")
     
-    db_path = os.getenv('DATABASE_PATH', 'database.db')
+    # Use config DATABASE_PATH which handles environment variables
+    db_path = config.DATABASE_PATH
     print(f"Using database path: {db_path}")
+    
+    # Ensure database directory exists
+    db_dir = os.path.dirname(db_path)
+    if db_dir and not os.path.exists(db_dir):
+        os.makedirs(db_dir, exist_ok=True)
+        print(f"Created database directory: {db_dir}")
     
     # Create tables
     create_tables(db_path)
     
-    # Ask user if they want to seed test data
+    # For Railway deployment, don't prompt for user input
+    if os.getenv('RAILWAY_ENVIRONMENT_NAME'):
+        print("Railway deployment detected - skipping interactive prompts")
+        return
+    
+    # Ask user if they want to seed test data (only in non-Railway environments)
     while True:
         seed_choice = input("\nSeed database with test data? (y/n): ").lower().strip()
         if seed_choice in ['y', 'yes']:
