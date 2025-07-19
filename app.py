@@ -465,7 +465,8 @@ def internal_error(error):
     }), 500
 
 
-if __name__ == '__main__':
+def initialize_scheduler():
+    """Initialize the scheduler when the app starts."""
     logger.info("Starting Recruiter Email Tracker Flask application")
     
     # Validate configuration on startup
@@ -496,8 +497,14 @@ if __name__ == '__main__':
     except Exception as e:
         logger.error(f"Failed to start background scheduler: {str(e)}")
         logger.warning("Application will continue without automatic email checking")
-    
-    # Start Flask app
+
+# Initialize scheduler immediately when module is loaded
+with app.app_context():
+    initialize_scheduler()
+
+
+if __name__ == '__main__':
+    # This is only used when running with python app.py directly
     # Use Railway's PORT environment variable if available, otherwise fall back to config
     port = int(os.getenv('PORT', config.FLASK_PORT))
     app.run(
