@@ -498,8 +498,10 @@ if __name__ == '__main__':
         logger.warning("Application will continue without automatic email checking")
     
     # Start Flask app
+    # Use Railway's PORT environment variable if available, otherwise fall back to config
+    port = int(os.getenv('PORT', config.FLASK_PORT))
     app.run(
         host=config.FLASK_HOST,
-        port=config.FLASK_PORT,
+        port=port,
         debug=config.FLASK_DEBUG
     )
