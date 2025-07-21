@@ -50,8 +50,10 @@ pip install -r requirements.txt
 # Run Flask development server
 python app.py
 
-# Initialize database
-python setup_db.py
+# Database management (migrations run automatically on startup)
+python migrate.py status      # Check migration status
+python migrate.py migrate     # Run pending migrations
+python migrate.py create --name add_new_feature  # Create new migration
 ```
 
 ## Environment Variables

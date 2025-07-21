@@ -2,18 +2,44 @@ import sqlite3
 import os
 from datetime import datetime
 from typing import Optional, Dict, List, Any
+import logging
+from migration_manager import MigrationManager
+
+logger = logging.getLogger(__name__)
 
 
 class DatabaseManager:
     def __init__(self, db_path: str = "database.db"):
         self.db_path = db_path
+        self.migration_manager = MigrationManager(db_path)
         self.ensure_database_exists()
+        self.run_migrations()
     
     def ensure_database_exists(self):
         """Ensure the database file exists and create if it doesn't."""
         if not os.path.exists(self.db_path):
             # Create empty database file
             open(self.db_path, 'a').close()
+            logger.info(f"Created new database file: {self.db_path}")
+    
+    def run_migrations(self):
+        """Run any pending database migrations."""
+        try:
+            logger.info("Checking for pending database migrations...")
+            result = self.migration_manager.migrate()
+            
+            if result['success']:
+                if result['applied_migrations']:
+                    logger.info(f"Applied migrations: {', '.join(result['applied_migrations'])}")
+                else:
+                    logger.info("Database is up to date")
+            else:
+                logger.error(f"Migration failed: {result['message']}")
+                raise Exception(f"Database migration failed: {result['message']}")
+                
+        except Exception as e:
+            logger.error(f"Error running migrations: {str(e)}")
+            raise
     
     def get_connection(self):
         """Get a database connection."""
