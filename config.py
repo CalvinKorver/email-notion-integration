@@ -8,7 +8,7 @@ load_dotenv()
 DATABASE_PATH = os.getenv('DATABASE_PATH', 'database.db')
 
 # Email checking interval (minutes)
-CHECK_INTERVAL = int(os.getenv('CHECK_INTERVAL_MINUTES', '20'))
+CHECK_INTERVAL = int(os.getenv('CHECK_INTERVAL_MINUTES', '2'))
 
 # Email lookback period (days) - how far back to check for emails on first run
 EMAIL_LOOKBACK_DAYS = int(os.getenv('EMAIL_LOOKBACK_DAYS', '3'))
